@@ -54,8 +54,10 @@
 |------------|------|-------------|
 | `res:votes:{electionId}` | Hash | `candidateId → voteCount` |
 | `res:total:{electionId}` | String | Total vote count |
+| `res:seen:{electionId}` | Set | Vote ids already counted (redelivery de-duplication) |
 
-All counter operations use `HINCRBY` and `INCR` for atomicity.
+Counting runs as one Lua script (`SADD` seen → `HINCRBY` + `INCR` only if the vote id is new), so it is atomic and
+a redelivered `vote.cast` event is never counted twice.
 
 ## Kafka Topics
 
@@ -67,8 +69,8 @@ All counter operations use `HINCRBY` and `INCR` for atomicity.
 
 | Target | Method | Purpose |
 |--------|--------|---------|
-| Candidate Service | OpenFeign | Enrich results with candidate names/parties |
-| Voting Service | OpenFeign | Fetch raw vote data for audit trail |
+| Candidate Service | OpenFeign (`/candidates/election/{id}`, retry ×3 + circuit breaker) | Enrich results with names/parties, including disqualified or withdrawn candidates |
+| Voting Service | OpenFeign (`/votes/election/{id}`, 500 per page, caller JWT forwarded) | Fetch vote data for the audit trail; failure → 503, never an empty audit |
 
 ## Design Decisions
 
@@ -78,6 +80,7 @@ All counter operations use `HINCRBY` and `INCR` for atomicity.
 | Redis counters | ✅ | Atomic increments, sub-millisecond reads |
 | SSE over WebSocket | ✅ | Simpler, HTTP-native, unidirectional push |
 | Graceful degradation | ✅ | Returns "Unknown Candidate" if Candidate Service is down |
+| Idempotent consumer | ✅ | Kafka is at-least-once; vote ids make counting exactly-once in effect |
 
 ## Running Locally
 
@@ -87,6 +90,10 @@ All counter operations use `HINCRBY` and `INCR` for atomicity.
 - Eureka Server running on `localhost:8761`
 - Candidate Service running on `localhost:8082`
 - Voting Service running on `localhost:8083`
+
+### Environment
+`JWT_SECRET` (required, same Base64 secret as user-service). Optional: `REDIS_HOST`, `REDIS_PORT`,
+`KAFKA_BOOTSTRAP_SERVERS`, `EUREKA_URL`.
 
 ### Start
 ```bash
@@ -111,7 +118,7 @@ curl -N http://localhost:8084/api/v1/results/election/{electionId}/live
 src/main/java/com/voting/resultservice/
 ├── ResultServiceApplication.java
 ├── client/         → Feign clients (Candidate + Voting)
-├── config/         → Kafka consumer config
+├── config/         → Kafka consumer config, Feign config (JWT forwarding)
 ├── controller/     → REST endpoints
 ├── dto/            → Response DTOs
 ├── event/          → Kafka event DTOs

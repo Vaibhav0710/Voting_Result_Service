@@ -7,17 +7,16 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
 /**
- * Consumes {@code vote.cast} events from Kafka and delegates
- * to the tally service for atomic counter increments.
+ * Consumes {@code vote.cast} events from Kafka.
  * <p>
  * Each event triggers:
  * <ol>
- *   <li>Redis counter increment (via {@link ResultTallyService})</li>
- *   <li>SSE push to active subscribers (via {@link LiveResultService})</li>
+ *   <li>An idempotent Redis count (via {@link ResultTallyService}), keyed by vote id</li>
+ *   <li>An SSE push to active subscribers (via {@link LiveResultService}), only if the vote was newly counted</li>
  * </ol>
  */
-@Service
 @Slf4j
+@Service
 @RequiredArgsConstructor
 public class VoteEventConsumer {
 
@@ -30,17 +29,13 @@ public class VoteEventConsumer {
             containerFactory = "voteCastListenerFactory"
     )
     public void onVoteCast(VoteCastEvent event) {
-        if (event.getCandidateId() == null || event.getElectionId() == null) {
-            log.warn("Received malformed vote.cast event — missing candidateId or electionId: {}", event);
+        if (event.getVoteId() == null || event.getCandidateId() == null || event.getElectionId() == null) {
+            log.warn("Ignoring malformed vote.cast event (voteId, candidateId and electionId are required): {}", event);
             return;
         }
-
-        log.info("Processing vote.cast: election={}, candidate={}, voter={}",
-                event.getElectionId(), event.getCandidateId(), event.getUserId());
-
-        resultTallyService.incrementVoteCount(event.getElectionId(), event.getCandidateId());
-        liveResultService.pushUpdate(event.getElectionId());
-
-        log.debug("Vote processed successfully for election={}", event.getElectionId());
+        boolean counted = resultTallyService.recordVote(event.getElectionId(), event.getCandidateId(), event.getVoteId());
+        if (counted) {
+            liveResultService.pushUpdate(event.getElectionId());
+        }
     }
 }

@@ -8,15 +8,17 @@ import java.util.UUID;
 /**
  * Contract for election result tallying operations.
  * <p>
- * Implementations must ensure atomicity of counter increments
- * for correctness under concurrent Kafka consumer processing.
+ * Implementations must count each vote exactly once, atomically, even when Kafka
+ * redelivers the same event or several consumers process events concurrently.
  */
 public interface ResultTallyService {
 
     /**
-     * Atomically increments the vote count for a candidate within an election.
+     * Atomically counts a vote for a candidate within an election, once per vote id.
+     *
+     * @return {@code false} when this vote id was already counted (Kafka redelivery)
      */
-    void incrementVoteCount(UUID electionId, UUID candidateId);
+    boolean recordVote(UUID electionId, UUID candidateId, UUID voteId);
 
     /**
      * Retrieves raw vote counts per candidate for the given election.

@@ -45,13 +45,35 @@ class VoteEventConsumerTest {
     void onVoteCast_shouldIncrementTallyAndPushUpdate() {
         // Arrange
         VoteCastEvent event = buildValidEvent();
+        when(resultTallyService.recordVote(ELECTION_ID, CANDIDATE_ID, VOTE_ID)).thenReturn(true);
 
         // Act
         voteEventConsumer.onVoteCast(event);
 
         // Assert
-        verify(resultTallyService).incrementVoteCount(ELECTION_ID, CANDIDATE_ID);
+        verify(resultTallyService).recordVote(ELECTION_ID, CANDIDATE_ID, VOTE_ID);
         verify(liveResultService).pushUpdate(ELECTION_ID);
+    }
+
+    @Test
+    @DisplayName("should not push an SSE update for a redelivered (already counted) vote")
+    void onVoteCast_redelivered_shouldNotPushUpdate() {
+        when(resultTallyService.recordVote(ELECTION_ID, CANDIDATE_ID, VOTE_ID)).thenReturn(false);
+
+        voteEventConsumer.onVoteCast(buildValidEvent());
+
+        verifyNoInteractions(liveResultService);
+    }
+
+    @Test
+    @DisplayName("should skip processing when voteId is null (cannot deduplicate)")
+    void onVoteCast_withNullVoteId_shouldSkipProcessing() {
+        VoteCastEvent event = buildValidEvent();
+        event.setVoteId(null);
+
+        voteEventConsumer.onVoteCast(event);
+
+        verifyNoInteractions(resultTallyService, liveResultService);
     }
 
     @Test
@@ -99,12 +121,13 @@ class VoteEventConsumerTest {
                 .voteHash("sha256-specific")
                 .timestamp(LocalDateTime.now())
                 .build();
+        when(resultTallyService.recordVote(specificElection, specificCandidate, VOTE_ID)).thenReturn(true);
 
         // Act
         voteEventConsumer.onVoteCast(event);
 
         // Assert — exact IDs are forwarded
-        verify(resultTallyService).incrementVoteCount(specificElection, specificCandidate);
+        verify(resultTallyService).recordVote(specificElection, specificCandidate, VOTE_ID);
         verify(liveResultService).pushUpdate(specificElection);
         verifyNoMoreInteractions(resultTallyService, liveResultService);
     }

@@ -9,16 +9,17 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Kafka consumer configuration for the Result Service.
- * <p>
- * Configures a type-safe {@link JsonDeserializer} for {@link VoteCastEvent}
- * with trusted packages enabled for cross-service deserialization.
+ * {@code vote.cast} consumer. Payloads are read as {@link VoteCastEvent} regardless of type headers;
+ * undeserialisable records are logged and skipped, other failures (e.g. Redis down) retried 3× a second apart.
  */
 @Configuration
 public class KafkaConfig {
@@ -36,12 +37,9 @@ public class KafkaConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
-        JsonDeserializer<VoteCastEvent> deserializer = new JsonDeserializer<>(VoteCastEvent.class);
-        deserializer.setRemoveTypeHeaders(true);
-        deserializer.addTrustedPackages("*");
-        deserializer.setUseTypeMapperForKey(false);
-
-        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), deserializer);
+        JsonDeserializer<VoteCastEvent> json = new JsonDeserializer<>(VoteCastEvent.class, false);
+        json.addTrustedPackages("com.voting.resultservice.event");
+        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), new ErrorHandlingDeserializer<>(json));
     }
 
     @Bean
@@ -49,6 +47,8 @@ public class KafkaConfig {
         ConcurrentKafkaListenerContainerFactory<String, VoteCastEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(voteCastConsumerFactory());
+        factory.setCommonErrorHandler(new DefaultErrorHandler(new FixedBackOff(1000L, 3L)));
+        factory.getContainerProperties().setObservationEnabled(true);
         return factory;
     }
 }
