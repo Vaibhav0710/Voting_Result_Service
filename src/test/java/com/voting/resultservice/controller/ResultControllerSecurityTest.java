@@ -46,6 +46,13 @@ class ResultControllerSecurityTest {
     }
 
     @Test
+    void unknownPath_is404_not500() throws Exception {
+        mockMvc.perform(get("/api/v1/results/does/not/exist")
+                        .header("Authorization", TestTokens.bearer(UUID.randomUUID(), "ROLE_VOTER")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void audit_anonymous_401() throws Exception {
         mockMvc.perform(get("/api/v1/results/election/{id}/audit", electionId))
                 .andExpect(status().isUnauthorized());

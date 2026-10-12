@@ -1,5 +1,6 @@
 package com.voting.resultservice.service;
 
+import com.voting.resultservice.audit.AuditLogger;
 import com.voting.resultservice.client.CandidateInfo;
 import com.voting.resultservice.client.PageResponse;
 import com.voting.resultservice.client.VoteReceipt;
@@ -20,6 +21,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,6 +29,7 @@ class AuditTrailServiceTest {
 
     @Mock private VotingClient votingClient;
     @Mock private CandidateDirectory candidateDirectory;
+    @Mock private AuditLogger auditLogger;
     @InjectMocks private AuditTrailService auditTrailService;
 
     private final UUID electionId = UUID.randomUUID();
@@ -58,6 +61,7 @@ class AuditTrailServiceTest {
         assertThat(audit.getAuditEntries()).extracting(AuditTrailResponse.AuditEntry::getVoteHash)
                 .containsExactly("h1", "h2", "h3");
         assertThat(audit.getAuditEntries().get(0).getCandidateName()).isEqualTo("Alice");
+        verify(auditLogger).recordForCurrentUser("AUDIT_TRAIL_VIEWED", "election:" + electionId, "SUCCESS");
     }
 
     @Test

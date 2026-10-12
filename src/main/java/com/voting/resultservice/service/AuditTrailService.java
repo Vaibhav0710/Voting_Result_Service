@@ -1,5 +1,6 @@
 package com.voting.resultservice.service;
 
+import com.voting.resultservice.audit.AuditLogger;
 import com.voting.resultservice.client.CandidateInfo;
 import com.voting.resultservice.client.PageResponse;
 import com.voting.resultservice.client.VoteReceipt;
@@ -30,6 +31,7 @@ public class AuditTrailService {
 
     private final VotingClient votingClient;
     private final CandidateDirectory candidateDirectory;
+    private final AuditLogger auditLogger;
 
     public AuditTrailResponse buildAudit(UUID electionId) {
         List<VoteReceipt> receipts = fetchAllReceipts(electionId);
@@ -39,6 +41,7 @@ public class AuditTrailService {
         List<AuditTrailResponse.AuditEntry> entries = receipts.stream()
                 .map(receipt -> toEntry(receipt, candidates.get(receipt.getCandidateId())))
                 .toList();
+        auditLogger.recordForCurrentUser("AUDIT_TRAIL_VIEWED", "election:" + electionId, "SUCCESS");
         return AuditTrailResponse.builder()
                 .electionId(electionId)
                 .totalVotes(entries.size())

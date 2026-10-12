@@ -126,3 +126,12 @@ src/main/java/com/voting/resultservice/
 ├── security/       → JWT authentication
 └── service/        → Business logic (tally, SSE, consumer)
 ```
+
+## 📈 Observability
+
+| What | How |
+|------|-----|
+| Metrics | `GET /actuator/prometheus` (tag `application=result-service`); health probes at `/actuator/health/liveness` and `/readiness` |
+| Tracing | Micrometer + Brave; trace ids in every log line and carried in from `vote.cast` Kafka headers. Export to Zipkin with `TRACING_SAMPLING` (default 0.0 locally, 0.1 in `prod`) and `ZIPKIN_URL` |
+| Logs | Plain console by default; `json-logs` profile = one JSON object per line; `logstash` profile also ships to `LOGSTASH_HOST:LOGSTASH_PORT`. `prod` turns on `json-logs` |
+| Audit | `AUDIT` logger records who viewed an election's audit trail |
