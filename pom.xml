@@ -31,6 +31,7 @@
 		<spring-cloud.version>2023.0.3</spring-cloud.version>
 		<logstash-logback-encoder.version>7.4</logstash-logback-encoder.version>
 		<resilience4j.version>2.2.0</resilience4j.version>
+		<jacoco.version>0.8.12</jacoco.version>
 	</properties>
 	<dependencies>
 		<!-- Core Web & Actuator -->
@@ -190,6 +191,27 @@
 						</exclude>
 					</excludes>
 				</configuration>
+			</plugin>
+			<!-- Coverage: the report is written to target/site/jacoco/index.html by `mvn verify` -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${jacoco.version}</version>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>
