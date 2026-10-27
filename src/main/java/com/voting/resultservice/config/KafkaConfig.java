@@ -1,6 +1,7 @@
 package com.voting.resultservice.config;
 
 import com.voting.resultservice.event.VoteCastEvent;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.core.MicrometerConsumerListener;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
@@ -24,11 +26,17 @@ import java.util.Map;
 @Configuration
 public class KafkaConfig {
 
-    @Value("${spring.kafka.bootstrap-servers}")
-    private String bootstrapServers;
+    private final String bootstrapServers;
+    private final String groupId;
+    private final MeterRegistry meterRegistry;
 
-    @Value("${spring.kafka.consumer.group-id}")
-    private String groupId;
+    public KafkaConfig(@Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
+                       @Value("${spring.kafka.consumer.group-id}") String groupId,
+                       MeterRegistry meterRegistry) {
+        this.bootstrapServers = bootstrapServers;
+        this.groupId = groupId;
+        this.meterRegistry = meterRegistry;
+    }
 
     @Bean
     public ConsumerFactory<String, VoteCastEvent> voteCastConsumerFactory() {
@@ -39,7 +47,11 @@ public class KafkaConfig {
 
         JsonDeserializer<VoteCastEvent> json = new JsonDeserializer<>(VoteCastEvent.class, false);
         json.addTrustedPackages("com.voting.resultservice.event");
-        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), new ErrorHandlingDeserializer<>(json));
+        DefaultKafkaConsumerFactory<String, VoteCastEvent> factory =
+                new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), new ErrorHandlingDeserializer<>(json));
+        // Spring Boot only instruments the factory it builds itself; this one needs the listener for consumer lag metrics
+        factory.addListener(new MicrometerConsumerListener<>(meterRegistry));
+        return factory;
     }
 
     @Bean
